@@ -45,47 +45,132 @@ Extract ALL attributes:
 - aria-label, aria-labelledby, aria-*
 - placeholder, value, href
 - Any custom attributes
+- **Component-specific attributes**: sp-*, data-spectra-*, data-oj-*, redwood-*
+
+**Capture element hierarchy:**
+- Note parent/child relationships
+- Record parent elements (up to 5 levels)
+- Capture children elements for deep text extraction
+
+#### Step 4a: Detect Component Framework
+For each element, determine component framework:
+
+1. **Check for Spectra** (Highest Priority)
+   - Look for `sp-*` prefix in: classes, attributes, IDs, tag names
+   - Check for `oj-spectra-*` classes
+   - Check for `spectra-*` classes/attributes
+   - Check for `data-spectra-*` attributes
+   - Traverse parent chain (up to 5 levels)
+
+2. **Check for JET** (Medium Priority)
+   - Look for `oj-*` classes (excluding `oj-spectra-*` and `oj-redwood-*`)
+   - Check for `data-oj-*` attributes
+   - Traverse parent chain (up to 5 levels)
+
+3. **Check for Redwood** (Medium Priority)
+   - Look for `oj-redwood-*` classes
+   - Check for `redwood-*` classes/attributes
+   - Traverse parent chain (up to 5 levels)
+
+4. **Default to HTML** (Fallback)
+   - If no component framework detected
+
+#### Step 4b: Extract Deep Text, Labels, and Placeholders
+For each element, extract nested text content:
+
+1. **Extract Label Text** (in priority order):
+   - Direct `aria-label` attribute
+   - Follow `aria-labelledby` reference to find label text
+   - Find associated `<label>` element via `for`/`id` relationship
+   - Traverse parent chain (up to 5 levels) for `<label>` tags
+   - Check sibling labels in parent's children
+
+2. **Extract Placeholder Text** (in priority order):
+   - Direct `placeholder` attribute on element
+   - `aria-placeholder` attribute on element
+   - Traverse parent chain (up to 3 levels) for placeholder in wrapper divs
+
+3. **Extract Deep Text Content**:
+   - Collect direct text content from element
+   - Recursively traverse all child elements
+   - Aggregate text from multiple `<span>` elements (see Step 4c)
+   - Normalize whitespace (replace multiple spaces with single space)
+   - Trim leading/trailing whitespace
+
+#### Step 4c: Aggregate Span Text
+For elements with text split across multiple spans:
+
+1. **Collect all text nodes** from descendant elements
+2. **Filter out hidden spans** (if display/visibility info available)
+3. **Join text parts** with single space separator
+4. **Normalize whitespace** - Replace multiple spaces/newlines with single space
+5. **Store aggregated text** for use in XPath selectors
+
+**Example:**
+```
+<span>Hello</span> <span>World</span> → "Hello World"
+```
 
 #### Step 5: Generate Selector Arrays
-For each interactive element:
+For each interactive element, generate selectors in this priority order:
 
-1. **Check for Test IDs** (Priority 1)
+1. **Test ID Attributes** (Priority 1)
    - If `data-testid` exists: `[data-testid="value"]`
    - If `data-cy` exists: `[data-cy="value"]`
    - If `data-test` exists: `[data-test="value"]`
 
-2. **Check for Stable ID** (Priority 2)
+2. **Component-Specific Attributes** (Priority 2)
+   - **Spectra**: `[sp-*="value"]`, `[data-spectra-*="value"]`
+   - **JET**: `[data-oj-*="value"]`
+   - **Redwood**: `[redwood-*="value"]`
+
+3. **Stable ID Selectors** (Priority 3)
    - If `id` exists and is stable (not dynamic):
      - Validate: No timestamps, hashes, random patterns
      - If stable: `#id`
 
-3. **Check for Name** (Priority 3)
+4. **Name Attributes** (Priority 4)
    - If `name` exists: `[name="value"]`
    - Combined: `tag[name="value"]`
 
-4. **Check for Aria** (Priority 4)
+5. **Component-Specific Classes** (Priority 5)
+   - **Spectra**: `.sp-*`, `.oj-spectra-*`
+   - **JET**: `.oj-*` (excluding `oj-spectra-*` and `oj-redwood-*`)
+   - **Redwood**: `.oj-redwood-*`
+   - Prefer combined: `.class1.class2.class3`
+
+6. **Aria Attributes** (Priority 6)
    - If `aria-label` exists: `[aria-label="value"]`
    - If `aria-labelledby` exists: `[aria-labelledby="value"]`
+   - Use extracted label text for XPath: `//tag[@aria-label="extracted-label"]`
 
-5. **Check for Type** (Priority 5)
+7. **Type Attributes** (Priority 7)
    - If `type` exists: `[type="value"]`
    - Combined: `tag[type="value"]`
    - Multiple: `tag[name="..."][type="..."]`
 
-6. **Check for Placeholder** (Priority 6)
+8. **Placeholder Attributes** (Priority 8)
    - If `placeholder` exists: `[placeholder="value"]`
    - Combined: `tag[placeholder="value"]`
+   - Use extracted placeholder: `//tag[@placeholder="extracted-placeholder"]`
 
-7. **Check for Stable Classes** (Priority 7)
-   - Filter out dynamic/hashed classes
-   - Use semantic classes only
-   - Prefer combined: `.class1.class2.class3`
+9. **Deep Text-Based XPath** (Priority 9)
+   - Use aggregated span text: `//tag[normalize-space(text())="aggregated-text"]`
+   - Use partial text: `//tag[contains(normalize-space(text()), "partial-text")]`
+   - Use label text: `//tag[normalize-space(.)="label-text"]`
+   - **Important**: Use `normalize-space()` to handle whitespace and span-split text
 
-8. **Generate XPath Fallbacks** (Priority 8)
-   - By ID: `//tag[@id="value"]`
-   - By name: `//tag[@name="value"]`
-   - By text: `//tag[contains(text(), "text")]`
-   - By attribute: `//tag[@attribute="value"]`
+10. **Stable Class Selectors** (Priority 10)
+    - Filter out dynamic/hashed classes
+    - Use semantic classes only
+    - Prefer combined: `.class1.class2.class3`
+
+11. **XPath Fallbacks** (Priority 11)
+    - By ID: `//tag[@id="value"]`
+    - By name: `//tag[@name="value"]`
+    - By text: `//tag[contains(normalize-space(text()), "text")]`
+    - By attribute: `//tag[@attribute="value"]`
+    - Component-specific: `//tag[@sp-*="value"]`, `//tag[@data-oj-*="value"]`
 
 #### Step 6: Validate Selectors
 - Ensure 3-5 selectors per element
@@ -113,9 +198,58 @@ Save to JSON format:
 }
 ```
 
+#### Step 8: Validate Generated Locators (AUTOMATED)
+**CRITICAL STEP** - Always validate locators before using in code.
+
+**Option 1: Automated Validation Script**
+```bash
+# Validate all interactive elements in snapshot
+npm run validate-locators snapshot.json
+
+# Or directly:
+ts-node scripts/validate-mcp-locators.ts snapshot.json
+
+# Validate specific element
+ts-node scripts/validate-mcp-locators.ts snapshot.json element_123
+```
+
+**Option 2: Programmatic Validation**
+```typescript
+import { generateAndValidateLocators } from '../utils/locator-validation-helper';
+
+const result = await generateAndValidateLocators(targetElement, snapshot, {
+  minValidSelectors: 2,
+  requireCSS: true,
+  requireXPath: true,
+  verbose: true
+});
+
+if (!result.success) {
+  // Handle validation failure
+  console.error('Validation failed:', result.recommendations);
+  // DO NOT proceed to code generation
+}
+```
+
+**Validation Requirements:**
+- ✓ At least 2 valid selectors per element
+- ✓ At least 1 CSS selector must be valid
+- ✓ At least 1 XPath selector must be valid
+- ✓ Component framework detected correctly
+
+**If Validation Fails:**
+1. Review validation report recommendations
+2. Take fresh MCP snapshot if attributes changed
+3. Verify element still exists in expected state
+4. Regenerate locators with updated snapshot
+5. Re-run validation until it passes
+
+**DO NOT proceed to code generation until validation passes!**
+
 ### Output
 - Captured elements with selector arrays
-- Ready for Page Object generation
+- Validation report for each element
+- Ready for Page Object generation (only if validation passes)
 
 ---
 
@@ -633,7 +767,458 @@ For each page:
 
 ---
 
-## Workflow 7: Quick Selector Update
+## Workflow 7: Generate Complete Test from URL and Navigation Instructions
+
+### Purpose
+Generate a complete test suite by providing only:
+- Base URL
+- Navigation instructions (steps to reach target pages)
+- Test scenarios/actions to perform
+
+The system automatically handles:
+- Navigation using MCP
+- Element capture at each step
+- Component framework detection
+- Locator generation and validation
+- Page Object creation
+- Complete test code generation
+
+### Navigation Instruction Format
+
+Define navigation steps using this format:
+
+```typescript
+interface NavigationStep {
+  action: 'navigate' | 'click' | 'fill' | 'wait' | 'verify';
+  target?: string;        // Element identifier, text, or UID from snapshot
+  value?: string;         // For fill actions
+  expectedUrl?: string;   // For navigation verification
+  waitFor?: string;       // Text to wait for after action
+  description?: string;   // Human-readable description
+}
+
+// Example navigation instructions
+const navigationSteps: NavigationStep[] = [
+  {
+    action: 'navigate',
+    target: 'https://example.com/login',
+    waitFor: 'Login',
+    description: 'Navigate to login page'
+  },
+  {
+    action: 'fill',
+    target: 'username',  // Will be found by label, placeholder, or name
+    value: 'testuser',
+    description: 'Enter username'
+  },
+  {
+    action: 'fill',
+    target: 'password',
+    value: 'testpass',
+    description: 'Enter password'
+  },
+  {
+    action: 'click',
+    target: 'Login',  // Button text or label
+    expectedUrl: '/dashboard',
+    description: 'Click login button'
+  },
+  {
+    action: 'verify',
+    target: 'Welcome',
+    description: 'Verify welcome message appears'
+  }
+];
+```
+
+### Steps
+
+#### Phase 1: Setup and Navigation
+
+**Step 1.1: Accept Input**
+- Base URL: Starting URL for the application
+- Navigation steps: Array of navigation instructions
+- Test scenarios: What to test on each page
+
+**Step 1.2: Initialize MCP Session**
+```typescript
+// Use MCP to open browser and navigate
+mcp_chrome-devtools_navigate_page(type: "url", url: baseUrl)
+mcp_chrome-devtools_wait_for(text: "Key page element")
+```
+
+**Step 1.3: Execute Navigation Steps**
+For each navigation step:
+
+1. **Navigate Action**:
+   ```
+   mcp_chrome-devtools_navigate_page(type: "url", url: step.target)
+   mcp_chrome-devtools_wait_for(text: step.waitFor || "Page loaded")
+   ```
+
+2. **Click Action**:
+   ```
+   // First, take snapshot to find element
+   const snapshot = mcp_chrome-devtools_take_snapshot(verbose: true)
+   // Find element by text, label, or identifier
+   const element = findElementInSnapshot(snapshot, step.target)
+   // Click using UID
+   mcp_chrome-devtools_click(uid: element.uid)
+   // Wait for navigation if expected
+   if (step.expectedUrl) {
+     mcp_chrome-devtools_wait_for(text: step.waitFor)
+   }
+   ```
+
+3. **Fill Action**:
+   ```
+   // Take snapshot
+   const snapshot = mcp_chrome-devtools_take_snapshot(verbose: true)
+   // Find input element
+   const element = findInputElement(snapshot, step.target)
+   // Fill using UID
+   mcp_chrome-devtools_fill(uid: element.uid, value: step.value)
+   ```
+
+4. **Wait Action**:
+   ```
+   mcp_chrome-devtools_wait_for(text: step.waitFor)
+   ```
+
+5. **Verify Action**:
+   ```
+   const snapshot = mcp_chrome-devtools_take_snapshot(verbose: true)
+   // Verify element exists in snapshot
+   const element = findElementInSnapshot(snapshot, step.target)
+   ```
+
+**Step 1.4: Capture Snapshot at Each Step**
+- **CRITICAL**: Take verbose snapshot after each navigation/interaction
+- Save snapshot with step context (URL, step number, description)
+- Store snapshots for later processing
+
+#### Phase 2: Element Capture and Processing
+
+**Step 2.1: Extract Interactive Elements**
+For each snapshot captured:
+
+1. **Find all interactive elements**:
+   - Form inputs: `input`, `textarea`, `select`
+   - Buttons: `button`, elements with `role="button"`
+   - Links: `a` tags, elements with `href`
+   - Interactive roles: `textbox`, `button`, `link`, `menuitem`, `tab`
+
+2. **Extract ALL attributes**:
+   ```typescript
+   import { ElementData } from './utils/component-detector';
+   
+   // For each element, extract:
+   - id, name, class, type, role
+   - data-testid, data-cy, data-test, data-*
+   - aria-label, aria-labelledby, aria-*
+   - placeholder, value, href
+   - Component-specific: sp-*, data-spectra-*, data-oj-*, redwood-*
+   - Parent/child relationships (up to 5 levels)
+   ```
+
+**Step 2.2: Detect Component Framework**
+```typescript
+import { detectComponentFramework } from './utils/component-detector';
+
+const framework = detectComponentFramework(element);
+// Returns: 'spectra' | 'jet' | 'redwood' | 'html'
+```
+
+**Step 2.3: Extract Deep Text, Labels, and Placeholders**
+```typescript
+import {
+  extractDeepText,
+  extractLabelText,
+  extractPlaceholderText,
+  aggregateSpanText
+} from './utils/text-extractor';
+
+// Extract all text content
+const textContent = extractDeepText(element, snapshot);
+
+// Extract label (traverses up DOM tree)
+const labelText = extractLabelText(element, snapshot);
+
+// Extract placeholder (from element or parent)
+const placeholderText = extractPlaceholderText(element, snapshot);
+
+// Aggregate text from multiple spans
+const aggregatedText = aggregateSpanText(element, snapshot);
+```
+
+**Step 2.4: Group Elements by Page**
+- Group elements by the page/URL where they were captured
+- Create page context for each group
+- Note which elements are used in navigation steps
+
+#### Phase 3: Locator Generation and Validation
+
+**Step 3.1: Generate Locators**
+```typescript
+import { generateLocators } from './utils/locator-generator';
+
+// For each interactive element
+const locators = generateLocators(element, snapshot, {
+  prioritizeComponentFramework: true,
+  extractDeepText: true,
+  aggregateSpanText: true,
+  preventStaleElements: true
+});
+
+// Result includes:
+// - selectors: string[] (ordered by priority)
+// - componentFramework: 'spectra' | 'jet' | 'redwood' | 'html'
+// - textContent: string | null
+// - labelText: string | null
+// - placeholderText: string | null
+```
+
+**Step 3.2: Validate Locators**
+```typescript
+import { generateAndValidateLocators } from './utils/locator-validation-helper';
+
+// Generate and validate in one step
+const result = await generateAndValidateLocators(element, snapshot, {
+  minValidSelectors: 2,
+  requireCSS: true,
+  requireXPath: true,
+  verbose: true
+});
+
+// Check validation result
+if (!result.success) {
+  // Handle validation failure
+  console.error('Validation failed:', result.recommendations);
+  // Options:
+  // 1. Take fresh snapshot and retry
+  // 2. Manually adjust selectors
+  // 3. Skip element (if optional)
+}
+```
+
+**Step 3.3: Fix Validation Failures**
+If validation fails:
+1. Review validation report recommendations
+2. Take fresh MCP snapshot if attributes changed
+3. Verify element still exists in expected state
+4. Regenerate locators with updated snapshot
+5. Re-run validation until it passes
+
+**Step 3.4: Ensure Quality**
+- Minimum 2 valid selectors per element
+- At least 1 CSS selector must be valid
+- At least 1 XPath selector must be valid
+- Component framework detected correctly
+
+#### Phase 4: Page Object Generation
+
+**Step 4.1: Create Page Object Structure**
+For each page/URL group:
+
+```typescript
+import { WebDriver } from 'selenium-webdriver';
+import { BasePage } from './BasePage';
+
+export class PageName extends BasePage {
+  // Selector arrays from validated locators
+  private readonly elementNameSelectors = [
+    'selector1',  // From validated locators
+    'selector2',  // From validated locators
+    'selector3',  // From validated locators
+    '//xpath'     // XPath fallback
+  ];
+
+  constructor(driver: WebDriver) {
+    super(driver);
+  }
+
+  // Action methods will be generated here
+}
+```
+
+**Step 4.2: Add Selector Arrays**
+- Use validated selectors from Phase 3
+- Name selectors based on element purpose (from navigation steps)
+- Group related selectors (form fields, buttons, links)
+
+**Step 4.3: Implement Action Methods**
+For each element used in navigation steps:
+
+```typescript
+// For fill actions
+async enterFieldName(value: string): Promise<void> {
+  await this.fillWithFallback(this.fieldNameSelectors, value);
+}
+
+// For click actions
+async clickButtonName(): Promise<void> {
+  await this.clickWithFallback(this.buttonNameSelectors);
+  // Add URL-based wait if navigation expected
+  if (expectedUrl) {
+    await this.driver.wait(
+      async () => {
+        const url = await this.driver.getCurrentUrl();
+        return url.includes(expectedUrl);
+      },
+      10000
+    );
+  }
+}
+
+// For verification
+async verifyElementExists(): Promise<boolean> {
+  try {
+    await this.findElementWithFallback(this.elementSelectors, 5000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+```
+
+**Step 4.4: Add Navigation Methods**
+```typescript
+async navigateTo(url: string): Promise<void> {
+  await this.driver.get(url);
+  await this.driver.wait(
+    async () => {
+      const currentUrl = await this.driver.getCurrentUrl();
+      return currentUrl.includes(url);
+    },
+    10000
+  );
+}
+
+async isPageLoaded(): Promise<boolean> {
+  try {
+    await this.findElementWithFallback(this.pageIndicatorSelectors, 5000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+```
+
+#### Phase 5: Test Code Generation
+
+**Step 5.1: Create Test File Structure**
+```typescript
+import { describe, it, before, after } from 'mocha';
+import { expect } from 'chai';
+import { initializeDriver, quitDriver } from '../utils/driver';
+import { LoginPage } from '../pages/LoginPage';
+import { DashboardPage } from '../pages/DashboardPage';
+
+describe('User Flow: Login to Dashboard', function() {
+  this.timeout(60000);
+
+  let loginPage: LoginPage;
+  let dashboardPage: DashboardPage;
+
+  before(async function() {
+    const driver = await initializeDriver();
+    loginPage = new LoginPage(driver);
+    dashboardPage = new DashboardPage(driver);
+  });
+
+  after(async function() {
+    await quitDriver();
+  });
+
+  // Test cases will be generated here
+});
+```
+
+**Step 5.2: Generate Test Cases from Navigation Steps**
+For each navigation step sequence:
+
+```typescript
+it('should complete user flow: [description]', async function() {
+  // Navigate to base URL
+  await loginPage.navigateTo('https://example.com/login');
+  
+  // Execute navigation steps
+  await loginPage.enterUsername('testuser');
+  await loginPage.enterPassword('testpass');
+  await loginPage.clickLogin();
+  
+  // Verify navigation
+  const isDashboardLoaded = await dashboardPage.isPageLoaded();
+  expect(isDashboardLoaded).to.be.true;
+  
+  // Verify elements
+  const welcomeExists = await dashboardPage.verifyWelcomeMessage();
+  expect(welcomeExists).to.be.true;
+});
+```
+
+**Step 5.3: Add Assertions**
+- Verify page loads correctly
+- Verify elements exist
+- Verify navigation occurred
+- Verify expected text/content appears
+
+**Step 5.4: Add Error Handling**
+```typescript
+it('should handle errors gracefully', async function() {
+  try {
+    await loginPage.enterUsername('invalid');
+    await loginPage.clickLogin();
+    
+    // Verify error message appears
+    const errorExists = await loginPage.verifyErrorMessage();
+    expect(errorExists).to.be.true;
+  } catch (error) {
+    console.error('Test failed:', error);
+    throw error;
+  }
+});
+```
+
+### Complete Example
+
+**Input:**
+```typescript
+const baseUrl = 'https://example.com';
+const navigationSteps = [
+  { action: 'navigate', target: 'https://example.com/login', waitFor: 'Login' },
+  { action: 'fill', target: 'username', value: 'testuser' },
+  { action: 'fill', target: 'password', value: 'testpass' },
+  { action: 'click', target: 'Login', expectedUrl: '/dashboard' },
+  { action: 'verify', target: 'Welcome' }
+];
+```
+
+**Output:**
+- `src/pages/LoginPage.ts` - Complete Page Object with validated selectors
+- `src/pages/DashboardPage.ts` - Complete Page Object with validated selectors
+- `src/tests/login-flow.spec.ts` - Complete test file
+- All locators validated and ready to use
+
+### Best Practices
+
+1. **Always validate locators** before generating code
+2. **Use component-specific locators** when framework is detected
+3. **Include URL-based waits** after navigation
+4. **Handle optional elements** gracefully
+5. **Group related elements** in Page Objects
+6. **Name methods descriptively** based on navigation steps
+7. **Add verification methods** for important elements
+
+### Output
+- Complete Page Objects for each page
+- Complete test file with all scenarios
+- All locators validated and working
+- Ready to run with `npm test`
+
+---
+
+## Workflow 8: Quick Selector Update
 
 ### Purpose
 Quickly update selectors when page structure changes slightly.

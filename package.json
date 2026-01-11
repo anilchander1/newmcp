@@ -7,6 +7,7 @@
                     "test":  "mocha --require ts-node/register \u0027src/tests/**/*.spec.ts\u0027",
                     "test:watch":  "mocha --require ts-node/register --watch \u0027src/tests/**/*.spec.ts\u0027",
                     "capture":  "ts-node scripts/capture-flow.ts",
+                    "validate-locators":  "ts-node scripts/validate-mcp-locators.ts",
                     "build":  "tsc"
                 },
     "keywords":  [

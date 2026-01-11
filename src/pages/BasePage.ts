@@ -119,4 +119,87 @@ export abstract class BasePage {
     const element = await this.waitForElementVisibleWithFallback(selectors, timeout);
     return await element.getText();
   }
+
+  /**
+   * Refresh element reference to prevent stale element errors
+   * Re-acquires the element using the same selectors
+   */
+  protected async refreshElementReference(
+    element: WebElement,
+    selectors: string[],
+    timeout: number = DEFAULT_TIMEOUT
+  ): Promise<WebElement> {
+    try {
+      // Try to get element ID to verify it's still valid
+      await element.getId();
+      return element;
+    } catch (error: any) {
+      // Element is stale, re-acquire it
+      return await this.findElementWithFallback(selectors, timeout);
+    }
+  }
+
+  /**
+   * Wait for element to be stable (not changing in DOM)
+   * Checks element presence and visibility multiple times to ensure stability
+   */
+  protected async waitForElementStable(
+    selectors: string[],
+    timeout: number = DEFAULT_TIMEOUT,
+    stabilityChecks: number = 2,
+    stabilityDelay: number = 200
+  ): Promise<WebElement> {
+    const element = await this.findElementWithFallback(selectors, timeout);
+    
+    // Perform multiple checks to ensure element is stable
+    for (let i = 0; i < stabilityChecks; i++) {
+      await new Promise(resolve => setTimeout(resolve, stabilityDelay));
+      try {
+        // Verify element is still present and visible
+        await this.driver.wait(
+          until.elementIsVisible(element),
+          1000,
+          `Element not stable at check ${i + 1}`
+        );
+      } catch (error: any) {
+        // Element changed, re-acquire it
+        return await this.findElementWithFallback(selectors, timeout);
+      }
+    }
+    
+    return element;
+  }
+
+  /**
+   * Enhanced findElementWithFallback with stale element prevention
+   * Automatically refreshes element references if stale element detected
+   */
+  protected async findElementWithFallbackSafe(
+    selectors: string[],
+    timeout: number = DEFAULT_TIMEOUT,
+    retryOnStale: boolean = true
+  ): Promise<WebElement> {
+    const maxRetries = retryOnStale ? 3 : 1;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const element = await this.findElementWithFallback(selectors, timeout);
+        // Verify element is not stale by getting its ID
+        await element.getId();
+        return element;
+      } catch (error: any) {
+        lastError = error;
+        // If it's a stale element error and we have retries left, try again
+        if (error.message && error.message.includes('stale') && attempt < maxRetries - 1) {
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError || new Error('Failed to find element after retries');
+  }
 }
